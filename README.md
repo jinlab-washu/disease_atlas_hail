@@ -21,6 +21,18 @@ Step 4: Reformat for export to Hail Table and VCF file
 Step 5: Reformat and export to Elastic Search
 ```
 
+## Input file dependencies
+```
+#non-VEP annotations (e.g. in silico predictors)
+/storage1/fs1/jin810/Active/References/2023_old_references/hail/Ref_HailFormat/combined_reference_data_grch38-2.0.4.ht
+
+#dbSNP annotations
+/storage1/fs1/jin810/Active/BRDGE/Reference/dbsnp_b151_grch38_all_20180418.ht
+
+#VEP configuration file
+/storage1/fs1/jin810/Active/BRDGE/Reference/vep104.json
+```
+
 ## Inputs and Outputs
 **Input 1:** bgzipped VCF created by GATK. Other VCF files created by other variant callers has not been tested  
 **Input 2:** Tab separated meta file. See example_meta.tsv for format.
