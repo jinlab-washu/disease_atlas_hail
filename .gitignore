@@ -1,1 +1,3 @@
 **/__pycache__
+*.log
+STDOUT_warnings.txt

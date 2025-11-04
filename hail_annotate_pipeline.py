@@ -157,11 +157,10 @@ def hail_initialize(jobname: str = None, mem: int = 32):
     today = datetime.now().strftime("%Y-%m-%d")
     print("Program Starting Date: {}".format(today))
 
-    #HAIL_HOME = subprocess.getoutput("pip3 show hail | grep Location | awk -F' ' '{print $2 \"/hail\"}'")
+
+    #Note the location of these are docker specific!
     HAIL_HOME = "/usr/local/lib/python3.8/dist-packages/hail"
     os.environ["HAIL_DIR"] = f"{HAIL_HOME}/backend"
-    # os.environ["HAIL_DIR"] = "/opt/conda/lib/python3.7/site-packages/hail/backend"
-    # os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-11-openjdk-amd64"
     os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-8-openjdk-amd64/jre"
 
     threads = int(os.environ['LSB_MAX_NUM_PROCESSORS'])
@@ -212,14 +211,7 @@ def hail_initialize(jobname: str = None, mem: int = 32):
     spark = SparkSession.builder.config(conf=conf).getOrCreate()
     sc = spark.sparkContext
 
-    # Log file setup
-    #log_base_path = "/storage1/fs1/jin810/Active/testing/yung-chun/Hail_logs"
-    #log_file_name = "hail_vds_new_combiner_{}.log".format(jobname if jobname else today)
-    #logfile = os.path.join(log_base_path, log_file_name)
-    #logfile = create_unique_filename(logfile)
-
     # Hail Initialization
-    #hl.init(default_reference='GRCh38', sc=sc, log=logfile)
     hl.init(sc=sc)
     # hl.init(master='local[16]') -> to use all the CPU
 
@@ -227,14 +219,16 @@ def hail_initialize(jobname: str = None, mem: int = 32):
 
 def run_pipeline(args):
 
-    spark, sc = hail_initialize("Lektest", mem="30")
+    spark, sc = hail_initialize("Lektest", mem=args.mem)
 
     '''
     Import VCF   
     '''
 
     mt = hl.import_vcf(args.vcf,reference_genome='GRCh38',array_elements_required=False,force_bgz=True)
-    mt = mt.repartition(64)
+
+    #This may need to change as vcf file gets larger
+    mt = mt.repartition(args.par)
 
 
     if args.subset:
@@ -251,9 +245,8 @@ def run_pipeline(args):
     meta_ht = hl.import_table(args.meta,delimiter='\t',key='ID')
     ht = annotate_frequencies(mt,meta_ht)
 
-    res_ht = hl.read_table('/storage1/fs1/jin810/Active/References/2023_old_references/hail/Ref_HailFormat/combined_reference_data_grch38-2.0.4.ht')
-    dbsnp_ht = hl.read_table('/storage1/fs1/jin810/Active/BRDGE/Reference/dbsnp_b151_grch38_all_20180418.ht')
-    #clinvar_ht = hl.read_table('/mnt/home/mlek/ceph/resources/clinvar_20190923.ht')
+    res_ht = hl.read_table(args.anno)
+    dbsnp_ht = hl.read_table(args.dbsnp)
 
     ht = ht.annotate(rsid = dbsnp_ht[ht.key].rsid,
         in_silico_predictors=hl.struct(
@@ -286,7 +279,7 @@ def run_pipeline(args):
     )
 
     #VEP Annotate the Hail table (ie. sites-only) using GRCh38 configuration file
-    ht = hl.vep(ht, 'file:///home/lekm/vep104.json')
+    ht = hl.vep(ht, args.vep)
 
     ht = prepare_ht_export(ht)
     ht = prepare_ht_for_es(ht)
@@ -304,6 +297,13 @@ if __name__ == '__main__':
     parser.add_argument('--vcf', '--input', '-i', help='bgzipped VCF file (.vcf.bgz)', required=True)
     parser.add_argument('--meta', '-m', help='Meta file containing sample population and sex', required=True)
     parser.add_argument('--subset', '-s', help='Samples to subset and keep', required=False)
+    parser.add_argument('--vep', '-v', help='VEP config file', default='/storage1/fs1/jin810/Active/BRDGE/Reference/vep104.json', required=False)
+    parser.add_argument('--anno', '-a', help='Annotations file', default='/storage1/fs1/jin810/Active/References/2023_old_references/hail/Ref_HailFormat/combined_reference_data_grch38-2.0.4.ht', required=False)
+    parser.add_argument('--dbsnp', '-d', help='dbSNP file', default='/storage1/fs1/jin810/Active/BRDGE/Reference/dbsnp_b151_grch38_all_20180418.ht', required=False)
+
+    parser.add_argument('--mem', '-e', help='Memory', default="30", required=False)
+    parser.add_argument('--par', '-p', help='Partitions to create for hail data', default=64, required=False)
+
     parser.add_argument('--out', '-o', help='Hail table output file name', required=True)
 
     args = parser.parse_args()
